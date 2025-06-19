@@ -2,97 +2,73 @@
 <html lang="fa">
 <head>
   <meta charset="UTF-8" />
-  <title>تشخیص چهره با دوربین</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
-  <style>
-    body {
-      font-family: Tahoma, sans-serif;
-      text-align: center;
-      background: #f0f0f0;
-      margin: 0; padding: 0;
-    }
-    #video {
-      margin-top: 20px;
-      border: 3px solid #666;
-      border-radius: 10px;
-    }
-    #message {
-      margin-top: 15px;
-      font-size: 18px;
-      color: #333;
-    }
-    #overlay {
-      position: absolute;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-    }
-    #container {
-      position: relative;
-      display: inline-block;
-    }
-  </style>
+  <title>تشخیص چهره ساده</title>
 </head>
 <body>
-  <h2>لطفاً در وسط صفحه قرار بگیرید و کمی به دوربین نگاه کنید</h2>
-  <div id="container">
-    <video id="video" width="480" height="360" autoplay muted></video>
-    <canvas id="overlay" width="480" height="360"></canvas>
-  </div>
-  <div id="message">در حال بارگذاری مدل‌ها...</div>
+  <h2>نمایش دوربین و تشخیص چهره</h2>
+  <video id="video" width="640" height="480" autoplay muted></video>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
 
   <script>
     const video = document.getElementById('video');
-    const canvas = document.getElementById('overlay');
-    const message = document.getElementById('message');
-    const ctx = canvas.getContext('2d');
 
-    async function startVideo() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
-        video.srcObject = stream;
-      } catch (err) {
-        message.innerText = 'دوربین شما در دسترس نیست یا اجازه دسترسی داده نشده!';
-        console.error(err);
-      }
-    }
-
-    async function loadModels() {
-      // مدل‌ها را از CDN لود کن
+    async function start() {
       await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js/weights');
+
+      navigator.mediaDevices.getUserMedia({ video: {} })
+        .then((stream) => {
+          video.srcObject = stream;
+        })
+        .catch((err) => {
+          alert('دوربین باز نشد: ' + err);
+        });
+
+      video.addEventListener('play', () => {
+        const canvas = faceapi.createCanvasFromMedia(video);
+        document.body.append(canvas);
+
+        const displaySize = { width: video.width, height: video.height };
+        faceapi.matchDimensions(canvas, displaySize);
+
+        setInterval(async () => {
+          const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+          const resizedDetections = faceapi.resizeResults(detections, displaySize);
+
+          canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+          faceapi.draw.drawDetections(canvas, resizedDetections);
+        }, 100);
+      });
     }
 
-    video.addEventListener('play', () => {
-      message.innerText = 'دوربین روشن شد، در حال تشخیص چهره...';
+    start();
+    const context = canvas.getContext('2d');
 
-      const displaySize = { width: video.width, height: video.height };
-      faceapi.matchDimensions(canvas, displaySize);
+setInterval(async () => {
+  const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+  const resizedDetections = faceapi.resizeResults(detections, displaySize);
 
-      const interval = setInterval(async () => {
-        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  faceapi.draw.drawDetections(canvas, resizedDetections);
 
-        if (detections.length === 0) {
-          message.innerText = 'چهره پیدا نشد! لطفاً در وسط بایستید و مستقیم نگاه کنید.';
-        } else {
-          message.innerText = 'چهره تشخیص داده شد.';
-          const resizedDetections = faceapi.resizeResults(detections, displaySize);
-          resizedDetections.forEach(detection => {
-            const box = detection.box;
-            ctx.strokeStyle = '#00FF00';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(box.x, box.y, box.width, box.height);
-          });
-          clearInterval(interval); // وقتی چهره پیدا شد، تکرار را متوقف کن
-        }
-      }, 200);
-    });
+  if (detections.length > 0) {
+    // عکس گرفتن از فریم ویدیو
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = video.videoWidth;
+    tempCanvas.height = video.videoHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
 
-    (async () => {
-      await loadModels();
-      message.innerText = 'مدل‌ها بارگذاری شدند. در حال روشن کردن دوربین...';
-      await startVideo();
-    })();
+    // تبدیل عکس به Base64
+    const imageData = tempCanvas.toDataURL('image/png');
+
+    // ذخیره در localStorage (فقط برای آزمایش)
+    localStorage.setItem('lastCapturedFace', imageData);
+
+    console.log('عکس چهره ذخیره شد.');
+  }
+}, 2000);  // هر 2 ثانیه عکس می‌گیرد اگر چهره وجود داشته باشد
+
   </script>
 </body>
 </html>
