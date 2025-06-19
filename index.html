@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+  <meta charset="UTF-8">
+  <title>ورود با چهره</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      direction: rtl;
+    }
+    video, canvas {
+      display: block;
+      margin: 10px auto;
+      border-radius: 12px;
+    }
+    #info {
+      font-size: 1.2rem;
+      margin: 20px;
+      color: darkblue;
+      font-weight: bold;
+    }
+    #form {
+      display: none;
+      margin-top: 20px;
+    }
+    input {
+      padding: 10px;
+      margin: 5px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      width: 80%;
+    }
+    button {
+      padding: 10px 20px;
+      background: darkgreen;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>سیستم ورود با چهره</h2>
+
+  <video id="video" width="320" height="240" autoplay muted></video>
+  <canvas id="canvas" width="320" height="240"></canvas>
+
+  <div id="info">لطفاً چهره‌تان را در وسط صفحه بگیرید، کمی عقب بروید...</div>
+
+  <div id="form">
+    <input type="text" id="name" placeholder="نام مکمل"><br>
+    <input type="password" id="pass" placeholder="رمز عبور"><br>
+    <button onclick="saveData()">ذخیره کن</button>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const context = canvas.getContext('2d');
+    const info = document.getElementById('info');
+    const form = document.getElementById('form');
+
+    const storedDescriptor = localStorage.getItem('faceDescriptor');
+    const storedName = localStorage.getItem('name');
+    const storedPass = localStorage.getItem('pass');
+
+    Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+      faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
+      faceapi.nets.faceRecognitionNet.loadFromUri('/models')
+    ]).then(startVideo);
+
+    function startVideo() {
+      navigator.mediaDevices.getUserMedia({ video: {} })
+        .then(stream => {
+          video.srcObject = stream;
+        })
+        .catch(err => {
+          info.innerText = "دوربین در دسترس نیست یا اجازه داده نشده.";
+          console.error(err);
+        });
+    }
+
+    video.addEventListener('play', () => {
+      setInterval(async () => {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const result = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+
+        if (result) {
+          info.innerText = "چهره شناسایی شد ✅";
+
+          const descriptor = result.descriptor;
+
+          if (!storedDescriptor) {
+            info.innerText = "لطفاً اطلاعات را وارد کنید 👇";
+            window.currentDescriptor = descriptor;
+            form.style.display = 'block';
+          } else {
+            const old = new Float32Array(JSON.parse(storedDescriptor));
+            const distance = faceapi.euclideanDistance(descriptor, old);
+            if (distance < 0.6) {
+              info.innerText = `خوش آمدی ${storedName} 🌟\nرمزت: ${storedPass}`;
+            } else {
+              info.innerText = "چهره شناسایی نشد ❌";
+            }
+          }
+        } else {
+          info.innerText = "لطفاً چهره‌تان را در وسط تصویر قرار دهید...";
+        }
+      }, 1000);
+    });
+
+    function saveData() {
+      localStorage.setItem('faceDescriptor', JSON.stringify(Array.from(window.currentDescriptor)));
+      localStorage.setItem('name', document.getElementById('name').value);
+      localStorage.setItem('pass', document.getElementById('pass').value);
+      form.style.display = 'none';
+      info.innerText = "ذخیره شد ✅ حالا می‌تونی فقط با چهره وارد شوی.";
+    }
+  </script>
+</body>
+</html>
